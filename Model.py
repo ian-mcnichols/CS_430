@@ -27,3 +27,22 @@ class Net(nn.Module):
         x = x.view(-1, 320)
         x = self.fc_layers(x)
         return x
+
+
+class MyNet(nn.Module):
+    def __init__(self):
+        super(MyNet, self).__init__()
+
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(1, 10, kernel_size=5),
+            nn.MaxPool2d(2),
+            nn.ReLU(),
+            nn.Conv2d(10, 20, kernel_size=5),
+            nn.Dropout(),
+            nn.MaxPool2d(2),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        x = self.conv_layers(x)
+        return x

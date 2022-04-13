@@ -3,8 +3,17 @@ from torchvision import datasets, transforms
 from torch import nn, optim
 import torch.nn
 import matplotlib.pyplot as plt
+import torchensemble
 
 import Model
+
+
+def adjust_learning_rate(optimizer, losses):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    if losses[0] < losses[1] and losses[1] < losses[2]:
+        for param_group in optimizer.param_groups:
+            param_group['lr']  *= .5
+    return
 
 
 def train(model, device, train_loader, optimizer, epoch):
@@ -38,8 +47,10 @@ def test(model, device, test_loader):
 
 
 if __name__ == "__main__":
+    optimize_learning = True
+    ensemble_learning = True
     batch_size = 128
-    num_epochs = 60
+    num_epochs = 40
     device = torch.device('cuda:1')
 
     train_loader = torch.utils.data.DataLoader(
@@ -55,18 +66,31 @@ if __name__ == "__main__":
                        ])),
         batch_size=batch_size, shuffle=True)
 
-    model = Model.Net().to(device)
-    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
-
-    train_loss = []
-    test_accuracy = []
-    for epoch in range(1, num_epochs + 1):
-        train_loss.append(train(model, device, train_loader, optimizer, epoch))
-        test_accuracy.append(test(model, device, test_loader))
-
-    plt.plot([x for x in range(1, num_epochs+1)], train_loss, "r")
-    plt.title("Loss per epoch")
-    plt.show()
-    plt.plot([x for x in range(1, num_epochs+1)], test_accuracy, "b")
-    plt.title("Accuracy per epoch")
-    plt.show()
+    if ensemble_learning:
+        model = torchensemble.VotingClassifier(
+            estimator = Model.Net().to(device),
+            n_estimators = 7,
+            cuda=True
+        )
+        criterion = torch.nn.CrossEntropyLoss()
+        model.set_criterion(criterion)
+        model.set_optimizer('SGD',lr=.01,momentum=0.5)
+        model.fit(train_loader=train_loader, epochs=num_epochs, test_loader=test_loader)
+        accuracy = model.evaluate(test_loader)
+        print("Final accuracy:", accuracy)
+    else:
+        model = Model.Net().to(device)
+        optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
+        train_loss = []
+        test_accuracy = []
+        for epoch in range(1, num_epochs + 1):
+            if epoch > 3 and optimize_learning:
+                adjust_learning_rate(optimizer, train_loss[-4:-1])
+            train_loss.append(train(model, device, train_loader, optimizer, epoch))
+            test_accuracy.append(test(model, device, test_loader))
+        plt.plot([x for x in range(1, num_epochs+1)], train_loss, "r")
+        plt.title("Loss per epoch")
+        plt.show()
+        plt.plot([x for x in range(1, num_epochs+1)], test_accuracy, "b")
+        plt.title("Accuracy per epoch")
+        plt.show()
